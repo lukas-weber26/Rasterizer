@@ -156,13 +156,17 @@ void drawline(scene s, canvas_point p0, canvas_point p1, rgb_color color) {
 	assert((p0.y >= (-s.screen_height/2)) && (p0.y < (s.screen_height/2)));
 	assert((p1.y >= (-s.screen_height/2)) && (p1.y < (s.screen_height/2)));
 
+	if (p0.x > p1.x) {
+		drawline(s, p1, p0, color);
+	}
+	
 	double a = ((double)(p1.y - p0.y))/((double)(p1.x-p0.x));
-	double b = p0.y - a*p0.x;
+	double y = p0.y;
 
 	for (int x = p0.x; x < p1.x; x++) {
-		int y = ((int)(a * ((double)x) + b));
-		canvas_point point = create_point(x,y);
+		canvas_point point = create_point(x,(int)y);
 		put_pixels_on_canvas(s, point, color);	
+		y = y + a;
 	}
 
 }
@@ -179,7 +183,7 @@ int main() {
 	new_scene.screen_height = 1080;
 	new_scene.screen = calloc(3*new_scene.screen_height*new_scene.screen_width, sizeof(unsigned char));
 
-	drawline(new_scene, create_point(-200,-200), create_point(200,-200), create_color(240,32,15));
+	drawline(new_scene, create_point(200,200), create_point(-400,-400), create_color(240,32,15));
 
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1920, 1080, 0, GL_RGB ,GL_UNSIGNED_BYTE, new_scene.screen);

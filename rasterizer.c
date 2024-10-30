@@ -292,8 +292,8 @@ void draw_triangle_outline(scene s, triangle t) {
 }
 
 void draw_triangle_interior(scene s, triangle t) {
-	assert(t.p1.y < t.p2.y);
-	assert(t.p2.y < t.p3.y);
+	assert(t.p1.y<= t.p2.y);
+	assert(t.p2.y <= t.p3.y);
 
 	//create two lists of x coordinates... (via interpolation and a bit of arena magic to avoid copying arrays)
 	int_array x01 = interpolate(s, t.p1.y, t.p1.x, t.p2.y, t.p2.x);	
@@ -319,8 +319,8 @@ void draw_triangle_interior(scene s, triangle t) {
 }
 
 void draw_triangle(scene s, triangle t) {
+	draw_triangle_interior(s, t);
 	draw_triangle_outline(s,t);
-	//draw_triangle_interior(s, t);
 }
 
 triangle triangle_create (int x1, int y1, int x2, int y2, int x3, int y3, unsigned char r, unsigned char g, unsigned char b, unsigned char r2, unsigned char g2, unsigned char b2) {
@@ -364,7 +364,7 @@ int main() {
 	new_scene.screen = calloc(3*new_scene.screen_height*new_scene.screen_width, sizeof(unsigned char));
 	new_scene.scene_arena = int_arena_create(10000);
 
-	triangle new_triangle = triangle_create(200, 300, -200, -200, 200, 200, 20, 210, 200, 254, 20, 20);
+	triangle new_triangle = triangle_create(-300, -300, 300, -300, 0, 300, 20, 160, 20, 0, 0, 0);
 	draw_triangle(new_scene, new_triangle); 
 
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	

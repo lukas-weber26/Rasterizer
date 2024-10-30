@@ -158,12 +158,6 @@ void put_pixels_on_canvas(scene s, canvas_point point, rgb_color color) {
 	put_pixel_on_screen(s, point.x + (s.screen_width/2), point.y + (s.screen_height/2), color);
 }
 
-void canvas_point_swap(canvas_point * a, canvas_point * b) {
-	canvas_point * temp  = a;
-	a = b;
-	b = temp;
-}
-
 int_arena * int_arena_create (int size) {
 	int_arena * arena = calloc(1, sizeof(int_arena));
 	arena->storage = calloc(size, sizeof(int));

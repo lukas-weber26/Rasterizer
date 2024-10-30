@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#define color_max 1000
+
 void window_size_callback(GLFWwindow * window, int width, int height) {
 	glViewport(0, 0, width, height);
 }
@@ -291,35 +293,65 @@ void draw_triangle_outline(scene s, triangle t) {
 	drawline(s, t.p2, t.p3, t.outline_color);
 }
 
-void draw_triangle_interior(scene s, triangle t) {
+rgb_color color_scale(rgb_color base_color, int scale) {
+	rgb_color result;
+	result.r = (unsigned char)(((int)base_color.r * scale)/color_max);
+	result.g = (unsigned char)(((int)base_color.g * scale)/color_max);
+	result.b = (unsigned char)(((int)base_color.b * scale)/color_max);
+	return result;
+}
+
+void draw_triangle_interior(scene s, triangle t, int h1, int h2, int h3) {
+	assert(h1 < color_max && h2 < color_max && h3 < color_max);
 	assert(t.p1.y<= t.p2.y);
 	assert(t.p2.y <= t.p3.y);
 
-	//create two lists of x coordinates... (via interpolation and a bit of arena magic to avoid copying arrays)
+	//x points
 	int_array x01 = interpolate(s, t.p1.y, t.p1.x, t.p2.y, t.p2.x);	
 	int_array x12 = interpolate(s, t.p2.y, t.p2.x, t.p3.y, t.p3.x);	
 	int_array x012 = int_array_cat(x01, x12);
 	int_array x02 = interpolate(s, t.p1.y, t.p1.x, t.p3.y, t.p3.x);	
 
+	//h points note, mixing these in with x point computations will lead to disaster
+	int_array h01	= interpolate(s, t.p1.y, h1, t.p2.y, h2);
+	int_array h12	= interpolate(s, t.p2.y, h2, t.p3.y, h3);
+	int_array h012 = int_array_cat(h01, h12);
+	int_array h02 = interpolate(s, t.p1.y, h1, t.p3.y, h3);	
+
 	//determine which item is left 
 	int_array x_left = x012;
 	int_array x_right = x02;
+	
+	int_array h_left = h012;
+	int_array h_right = h02;
 
 	int m = (int)floor(((double)x012.n_integers)/2.0);
 	if (int_array_get_index(x02,m) < int_array_get_index(x012,m)) {
 		x_left = x02;
 		x_right = x012;
+
+		h_left = h02;
+		h_right = h012;
 	}
 
 	for (int y = t.p1.y; y < t.p3.y; y++) {
-		for (int x = int_array_get_index(x_left, y-t.p1.y); x < int_array_get_index(x_right, y-t.p1.y); x++) {
-			put_pixels_on_canvas(s, create_point(x,y), t.color);
+		int xl = int_array_get_index(x_left, y-t.p1.y);
+		int xr = int_array_get_index(x_right, y-t.p1.y);
+
+		int hl = int_array_get_index(h_left, y-t.p1.y);
+		int hr = int_array_get_index(h_right, y-t.p1.y);
+
+		int_array h_segment = interpolate(s, xl, hl, xr, hr);
+
+		for (int x = xl; x < xr; x++) {
+			rgb_color shaded_color = color_scale(t.color,int_array_get_index(h_segment, x-xl)); 
+			put_pixels_on_canvas(s, create_point(x,y), shaded_color);
 		}
 	}	
 }
 
 void draw_triangle(scene s, triangle t) {
-	draw_triangle_interior(s, t);
+	draw_triangle_interior(s, t, 10, 500, 990);
 	draw_triangle_outline(s,t);
 }
 

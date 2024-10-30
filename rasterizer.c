@@ -120,10 +120,18 @@ typedef struct rgb_color {
 	unsigned char b;
 } rgb_color;
 
+typedef struct int_arena {
+	int n_items;
+	int max_items;
+	int * storage;
+} int_arena;
+
 typedef struct scene {
 	unsigned char * screen; 
 	int screen_width; 
 	int screen_height; 
+	int_arena * scene_arena;
+
 } scene;
 
 canvas_point create_point(int x, int y) {
@@ -150,23 +158,93 @@ void put_pixels_on_canvas(scene s, canvas_point point, rgb_color color) {
 	put_pixel_on_screen(s, point.x + (s.screen_width/2), point.y + (s.screen_height/2), color);
 }
 
+void canvas_point_swap(canvas_point * a, canvas_point * b) {
+	canvas_point * temp  = a;
+	a = b;
+	b = temp;
+}
+
+int_arena * int_arena_create (int size) {
+	int_arena * arena = calloc(1, sizeof(int_arena));
+	arena->storage = calloc(size, sizeof(int));
+	arena->max_items = size;
+	arena->n_items = 0;
+	return arena;
+}
+
+void int_arena_free(int_arena * arena) {
+	free(arena->storage);
+	free(arena);
+} 
+
+void int_arena_add(int_arena * arena, int a) {
+	if (arena->n_items >= arena->max_items-1) {
+		arena->max_items *= 2;
+		arena->storage = realloc(arena->storage, arena->max_items*sizeof(int));
+	}
+	arena->storage[arena->n_items] = a;
+	arena->n_items++;
+}
+
+typedef struct int_array {
+	int n_integers;
+	int offset;
+	struct int_arena * arena;
+} int_array;
+
+int_array int_array_create(int_arena * arena) {
+	int_array new_array = {0,arena->n_items, arena};	
+	return new_array;
+}
+
+void int_array_append(int_array *array, int value) {
+	int_arena_add(array->arena, value);
+	array->n_integers ++;
+}
+
+int int_array_get_index(int_array array, int index) {
+	return array.arena->storage[array.offset + index];
+}
+
+int_array interpolate(scene s, int i0, int d0, int i1, int d1) {
+	int_array new_array = int_array_create(s.scene_arena);
+	if (i0 == i1) {
+		int_array_append(&new_array, d0);
+		return new_array;
+	}
+	double a = ((double)(d1-d0))/((double)(i1 - i0));
+	double d = d0;
+	for (int i = i0; i < i1; i ++) {
+		int_array_append(&new_array, (int)d);
+		d = d+a;
+	}
+	return new_array;
+}
+
 void drawline(scene s, canvas_point p0, canvas_point p1, rgb_color color) {
 	assert((p0.x >= (-s.screen_width/2)) && (p0.x < (s.screen_width/2)));
 	assert((p1.x >= (-s.screen_width/2)) && (p1.x < (s.screen_width/2)));
 	assert((p0.y >= (-s.screen_height/2)) && (p0.y < (s.screen_height/2)));
 	assert((p1.y >= (-s.screen_height/2)) && (p1.y < (s.screen_height/2)));
 
-	if (p0.x > p1.x) {
-		drawline(s, p1, p0, color);
-	}
-	
-	double a = ((double)(p1.y - p0.y))/((double)(p1.x-p0.x));
-	double y = p0.y;
+	int_array draw_array; 
 
-	for (int x = p0.x; x < p1.x; x++) {
-		canvas_point point = create_point(x,(int)y);
-		put_pixels_on_canvas(s, point, color);	
-		y = y + a;
+	if (abs(p1.x - p0.x) > abs(p1.y - p0.y)) {
+		if (p0.x > p1.x) {
+			canvas_point_swap(&p0,&p1);	
+		}
+		draw_array = interpolate(s, p0.x, p0.y, p1.x, p1.y);
+		for (int x = p0.x; x < p1.x; x++) {
+			put_pixels_on_canvas(s, create_point(x,int_array_get_index(draw_array,x-p0.x)), color);
+		}
+	} else {
+		if (p0.y > p1.y) {
+			canvas_point_swap(&p0,&p1);	
+		}
+		draw_array = interpolate(s,p0.y, p0.x, p1.y, p1.x);
+		for (int y = p0.y; y < p1.y; y++) {
+			put_pixels_on_canvas(s, create_point(int_array_get_index(draw_array, y-p0.y), y), color);
+		}
 	}
 
 }
@@ -182,8 +260,9 @@ int main() {
 	new_scene.screen_width = 1920;
 	new_scene.screen_height = 1080;
 	new_scene.screen = calloc(3*new_scene.screen_height*new_scene.screen_width, sizeof(unsigned char));
+	new_scene.scene_arena = int_arena_create(10000);
 
-	drawline(new_scene, create_point(200,200), create_point(-400,-400), create_color(240,32,15));
+	drawline(new_scene, create_point(-10,-200), create_point(400,400), create_color(240,32,15));
 
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1920, 1080, 0, GL_RGB ,GL_UNSIGNED_BYTE, new_scene.screen);
@@ -206,5 +285,6 @@ int main() {
 	}
 
 	glfwTerminate();
+	int_arena_free(new_scene.scene_arena);
 	free(new_scene.screen);
 }

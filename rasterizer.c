@@ -175,6 +175,7 @@ void int_arena_add(int_arena * arena, int a) {
 	if (arena->n_items >= arena->max_items-1) {
 		arena->max_items *= 2;
 		arena->storage = realloc(arena->storage, arena->max_items*sizeof(int));
+		printf("Realloc occured\n");
 	}
 	arena->storage[arena->n_items] = a;
 	arena->n_items++;
@@ -247,6 +248,47 @@ void drawline(scene s, canvas_point p0, canvas_point p1, rgb_color color) {
 
 }
 
+typedef struct triangle {
+	canvas_point p1;	
+	canvas_point p2;	
+	canvas_point p3;	
+	rgb_color color;
+} triangle; 
+
+void draw_triangle(scene s, triangle t) {
+	drawline(s, t.p1, t.p2, t.color);
+	drawline(s, t.p1, t.p3, t.color);
+	drawline(s, t.p2, t.p3, t.color);
+}
+
+triangle triangle_create (int x1, int y1, int x2, int y2, int x3, int y3, unsigned char r, unsigned char g, unsigned char b) {
+	canvas_point p1 = create_point(x1,y1);
+	canvas_point p2 = create_point(x2,y2);
+	canvas_point p3 = create_point(x3,y3);
+	canvas_point temp;
+
+	if (p1.y > p2.y) {
+		temp = p1; 
+		p1 = p2;
+		p2 = temp;
+	}
+	
+	if (p2.y > p3.y) {
+		temp = p2; 
+		p2 = p3;
+		p3 = temp;
+	}
+	
+	if (p1.y > p2.y) {
+		temp = p1; 
+		p1 = p2;
+		p2 = temp;
+	}
+
+	triangle new_triangle = {p1,p2,p3,create_color(r,g,b)};
+	return new_triangle;
+}
+
 int main() {	
 	unsigned char * screen = calloc(3*1920*1080,sizeof(unsigned char));
 
@@ -260,11 +302,15 @@ int main() {
 	new_scene.screen = calloc(3*new_scene.screen_height*new_scene.screen_width, sizeof(unsigned char));
 	new_scene.scene_arena = int_arena_create(10000);
 
-	drawline(new_scene, create_point(400,200), create_point(400,400), create_color(240,32,15));
+	//drawline(new_scene, create_point(400,200), create_point(400,400), create_color(240,32,15));
+	triangle new_triangle = triangle_create(200, 300, -200, -200, 500, 400, 42, 212, 40);
+	draw_triangle(new_scene, new_triangle);
 
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1920, 1080, 0, GL_RGB ,GL_UNSIGNED_BYTE, new_scene.screen);
 	glGenerateMipmap(GL_TEXTURE_2D);
+
+	int i = 0;
 
 	while(!glfwWindowShouldClose(window)) {
 		handle_close(window);
@@ -280,6 +326,14 @@ int main() {
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
+	
+		draw_triangle(new_scene, new_triangle);
+
+		i++;
+		if (i > 100) {
+			exit(0);
+		}
+
 	}
 
 	glfwTerminate();

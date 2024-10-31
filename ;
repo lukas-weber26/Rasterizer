@@ -369,16 +369,14 @@ coord matrix_vector_mul(matrix m, coord v) {
 
 matrix matrix_normalize(matrix m) {
 	double val = m.d.w;
-	if (val*val < 0.001) {
+	if (val*val < 0.1) {
 		return m;
 	}
-	return matrix_scale(m, (1/val));
+	return result;
 }
 
-matrix matrix_matrix_mul(matrix m, matrix b) {
-	matrix a = matrix_fip(m);
-	matrix result;
-	//ugh
+matrix matrix_matrix_mul(matrix m, double s) {
+	matrix result = {coord_scale(m.a, s), coord_scale(m.b, s), coord_scale(m.c, s), coord_scale(m.d, s)};
 	return result;
 }
 

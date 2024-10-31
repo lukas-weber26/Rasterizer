@@ -596,9 +596,8 @@ coord coord_unit(coord intput_coord) {
 double coord_project(coord n, coord l) {
 	double dot = n.x*l.x + n.y*l.y + n.z*l.z;
 	double len = (coord_length(n)* coord_length(l));
-	//printf("dot, len: %f %f\n",dot, len);
-	assert(dot * dot < 1.001);
 	double output = dot/len;
+	assert(output*output < 1.01);
 	return output;
 } 
 
@@ -613,16 +612,37 @@ int get_lighting (coord input_coord, coord normal) {
 	if (diffuse < 0.01) {
 		diffuse = 0;
 	} 
-	//printf("Diffuse: %f\n", diffuse);
-	assert(diffuse < 1.0);
-	
+	assert(diffuse < 1.01);
 
-	double intensity = 0.2 + 0.4*diffuse;//specular goes here!
+	coord R = coord_sub(coord_scale(normal, 2*coord_dot(normal,light_vector)), light_vector); 
+	coord V = coord_scale(input_coord, -1.0); //from point to camera;
+
+	R.w = 0; 
+	V.w = 0;
+	
+	//coord_print(R);
+	//coord_print(V);
+
+	double specular = coord_project(R,V);
+	specular = specular > 0 ? specular : 0;
+	double specular_power = specular;
+
+	for (int i = 10; i > 0; i --) {
+		specular_power *= specular;
+	}
+
+	//specular = specular_power*10;
+
+	assert(specular < 1.01);
+	printf("Specular: %f\n", specular);
+	if (specular < 0.01) {
+		specular = 0;
+	} 
+
+	double intensity = 0.2 + 0.4*diffuse + 0.4*specular; 
 	//printf("Intensity intesity: %f\n", intensity);
 
 	int return_intensity =	(int)(intensity*((double)max_intensity));
-
-	printf("Return intesity: %d\n", return_intensity);
 	
 	return return_intensity;
 }

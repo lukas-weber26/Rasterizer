@@ -313,6 +313,14 @@ coord coord_sub(coord a, coord b) {
 	return output;
 }
 
+coord coord_normalize(coord a) {
+	if (a.w * a.w < 0.001) {
+		return a;
+	}
+	coord output = {a.x/a.w,a.y/a.w,a.z/a.w,a.w/a.w};
+	return output;
+}
+
 double coord_length(coord a) {
 	double output = sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
 	return output;
@@ -480,6 +488,89 @@ void cube_from_3d(scene s) {
 	drawline(s, four, four_rear, color);
 }
 
+typedef struct raw_triangle {
+	coord a;
+	coord b;
+	coord c;
+} raw_triangle;
+
+raw_triangle raw_triangle_create(coord a, coord b, coord c) {
+	raw_triangle output = {a,b,c};
+	return output;
+}
+
+triangle raw_to_processed_triangle(raw_triangle t, rgb_color red, rgb_color blue) {
+	triangle processed_triangle;
+	processed_triangle.color = red;
+	processed_triangle.outline_color = blue;
+	processed_triangle.p1 = coord_to_canvas(coord_to_viewport(t.a));
+	processed_triangle.p2 = coord_to_canvas(coord_to_viewport(t.b));
+	processed_triangle.p3 = coord_to_canvas(coord_to_viewport(t.c));
+	
+	canvas_point temp;
+
+	if (processed_triangle.p1.y > processed_triangle.p2.y) {
+		temp = processed_triangle.p1; 
+		processed_triangle.p1 = processed_triangle.p2;
+		processed_triangle.p2 = temp;
+	}
+	
+	if (processed_triangle.p2.y > processed_triangle.p3.y) {
+		temp = processed_triangle.p2; 
+		processed_triangle.p2 = processed_triangle.p3;
+		processed_triangle.p3 = temp;
+	}
+	
+	if (processed_triangle.p1.y > processed_triangle.p2.y) {
+		temp = processed_triangle.p1; 
+		processed_triangle.p1 = processed_triangle.p2;
+		processed_triangle.p2 = temp;
+	}
+	return processed_triangle;	
+}
+
+void tirangle_cube(scene s) {
+	rgb_color red = {244, 23, 43};
+	rgb_color blue = {23, 43, 243};
+	
+	coord points [8] = {
+		coord_create(-0.25, -0.25, 2.0, 0.0),
+		coord_create(0.25, -0.25, 2.0, 0.0),
+		coord_create(-0.25, 0.25, 2.0, 0.0),
+		coord_create(0.25, 0.25, 2.0, 0.0),
+		coord_create(-0.25, -0.25, 2.5, 0.0),
+		coord_create(0.25, -0.25, 2.5, 0.0),
+		coord_create(-0.25, 0.25, 2.5, 0.0),
+		coord_create(0.25, 0.25, 2.5, 0.0),
+	};
+
+	enum {BLF = 0, BRF = 1, TLF = 2, TRF = 3, BLB = 4, BRB = 5, TLB = 6, TRB = 7};
+	raw_triangle triangles [12] = {
+		raw_triangle_create(points[BLF], points[BRF], points[TRF]),
+		raw_triangle_create(points[TRF], points[TLF], points[BLF]),
+		raw_triangle_create(points[BLB], points[BRB], points[TRB]),
+		raw_triangle_create(points[TRB], points[TLB], points[BLB]),
+		raw_triangle_create(points[BRF], points[BLF], points[BLB]),
+		raw_triangle_create(points[BLB], points[BRB], points[BRF]),
+		raw_triangle_create(points[TRF], points[TLF], points[TLB]),
+		raw_triangle_create(points[TLB], points[TRB], points[TRF]),
+		raw_triangle_create(points[BRF], points[TRB], points[BRB]),
+		raw_triangle_create(points[TRF], points[TRB], points[TRB]),
+		raw_triangle_create(points[BLF], points[TLB], points[BLB]),
+		raw_triangle_create(points[TLF], points[TLB], points[TLB]),
+	}; 
+
+	triangle final_triangles [12];
+	for (int i = 0; i < 12; i++) {
+		final_triangles[i] = raw_to_processed_triangle(triangles[i], red, blue);	
+	}	
+	
+	for (int i = 0; i < 12; i++) {
+		draw_triangle(s, final_triangles[i]);
+	}	
+
+}
+
 int main() {	
 	unsigned char * screen = calloc(3*1920*1080,sizeof(unsigned char));
 
@@ -496,7 +587,8 @@ int main() {
 	//triangle new_triangle = triangle_create(-300, -300, 300, -300, 0, 300, 20, 160, 20, 0, 0, 0);
 	//draw_triangle(new_scene, new_triangle); 
 	//triangle_from_3d(new_scene);
-	cube_from_3d(new_scene);
+	//cube_from_3d(new_scene);
+	tirangle_cube(new_scene); 
 
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1920, 1080, 0, GL_RGB ,GL_UNSIGNED_BYTE, new_scene.screen);

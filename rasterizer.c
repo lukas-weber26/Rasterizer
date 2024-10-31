@@ -6,6 +6,11 @@
 #include <math.h>
 
 #define color_max 1000
+#define canvas_width 1920
+#define canvas_height 1080
+#define viewport_width 1.0
+#define viewport_height 0.56
+#define canvas_depth 1.0
 
 void window_size_callback(GLFWwindow * window, int width, int height) {
 	glViewport(0, 0, width, height);
@@ -276,6 +281,57 @@ typedef struct triangle {
 	rgb_color outline_color;
 } triangle; 
 
+typedef struct coord {
+	double x;
+	double y;
+	double z;
+	double w;
+} coord;
+
+coord coord_create(double x, double y, double z, double w) {
+	coord output = {x,y,z, w};
+	return output;
+} 
+
+coord coord_scale(coord input, double scale) {
+	coord output = {input.x*scale,input.y*scale,input.z*scale, input.w*scale};
+	return output;
+} 
+
+double coord_dot(coord a, coord b) {
+	double output = a.x*b.x + a.y*b.y + a.z*b.z + a.w + b.w;
+	return output;
+} 
+
+coord coord_add(coord a, coord b) {
+	coord output = {a.x+b.x,a.y+b.y,a.z+b.z, a.w+b.w};
+	return output;
+} 
+
+coord coord_sub(coord a, coord b) {
+	coord output = {a.x-b.x,a.y-b.y,a.z-b.z, a.w-b.w};
+	return output;
+}
+
+double coord_length(coord a) {
+	double output = sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
+	return output;
+}
+
+coord coord_to_viewport(coord a) {
+	double x = (a.x*canvas_depth)/a.z;
+	double y = (a.y*canvas_depth)/a.z;
+	coord result = {x, y, canvas_depth, 0.0};
+	return result;
+}
+
+canvas_point coord_to_canvas(coord coordinate) {
+	int x_coord = (int)(coordinate.x*(((double)canvas_width)/viewport_width));
+	int y_coord = (int)(coordinate.y*(((double)canvas_height)/viewport_height));
+	canvas_point result = {x_coord,y_coord};
+	return result;
+}
+
 int_array int_array_cat(int_array a, int_array b) {
 	assert(a.arena == b.arena);
 	assert(a.offset + a.n_integers == b.offset);
@@ -383,6 +439,47 @@ triangle triangle_create (int x1, int y1, int x2, int y2, int x3, int y3, unsign
 	return new_triangle;
 }
 
+void triangle_from_3d(scene s) {
+	canvas_point one = coord_to_canvas(coord_to_viewport(coord_create(-0.25, -0.25, 2.0, 0.0)));
+	canvas_point two = coord_to_canvas(coord_to_viewport(coord_create(0.25, -0.25, 2.0, 0.0)));
+	canvas_point three= coord_to_canvas(coord_to_viewport(coord_create(0.0, 0.25, 2.0, 0.0)));
+	rgb_color interior = {240, 21, 14};
+	rgb_color exterior = {240, 21, 14};
+	triangle t = {one, two, three, interior, exterior};	
+
+	draw_triangle_interior(s, t, 10, 500, 990);
+	draw_triangle_outline(s,t);
+}
+
+void cube_from_3d(scene s) {
+	canvas_point one = coord_to_canvas(coord_to_viewport(coord_create(-0.25, -0.25, 2.0, 0.0)));
+	canvas_point two = coord_to_canvas(coord_to_viewport(coord_create(0.25, -0.25, 2.0, 0.0)));
+	canvas_point three= coord_to_canvas(coord_to_viewport(coord_create(0.25, 0.25, 2.0, 0.0)));
+	canvas_point four = coord_to_canvas(coord_to_viewport(coord_create(-0.25, 0.25, 2.0, 0.0)));
+	
+	canvas_point one_rear = coord_to_canvas(coord_to_viewport(coord_create(-0.25, -0.25, 4.0, 0.0)));
+	canvas_point two_rear  = coord_to_canvas(coord_to_viewport(coord_create(0.25, -0.25, 4.0, 0.0)));
+	canvas_point three_rear = coord_to_canvas(coord_to_viewport(coord_create(0.25, 0.25, 4.0, 0.0)));
+	canvas_point four_rear = coord_to_canvas(coord_to_viewport(coord_create(-0.25, 0.25, 4.0, 0.0)));
+
+	rgb_color color = {240, 21, 14};
+
+	drawline(s, one, two, color);
+	drawline(s, two, three, color);
+	drawline(s, three, four, color);
+	drawline(s, four, one, color);
+	
+	drawline(s, one_rear, two_rear, color);
+	drawline(s, two_rear, three_rear, color);
+	drawline(s, three_rear, four_rear, color);
+	drawline(s, four_rear, one_rear, color);
+	
+	drawline(s, one, one_rear, color);
+	drawline(s, two, two_rear, color);
+	drawline(s, three, three_rear, color);
+	drawline(s, four, four_rear, color);
+}
+
 int main() {	
 	unsigned char * screen = calloc(3*1920*1080,sizeof(unsigned char));
 
@@ -396,8 +493,10 @@ int main() {
 	new_scene.screen = calloc(3*new_scene.screen_height*new_scene.screen_width, sizeof(unsigned char));
 	new_scene.scene_arena = int_arena_create(10000);
 
-	triangle new_triangle = triangle_create(-300, -300, 300, -300, 0, 300, 20, 160, 20, 0, 0, 0);
-	draw_triangle(new_scene, new_triangle); 
+	//triangle new_triangle = triangle_create(-300, -300, 300, -300, 0, 300, 20, 160, 20, 0, 0, 0);
+	//draw_triangle(new_scene, new_triangle); 
+	//triangle_from_3d(new_scene);
+	cube_from_3d(new_scene);
 
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1920, 1080, 0, GL_RGB ,GL_UNSIGNED_BYTE, new_scene.screen);
@@ -420,8 +519,8 @@ int main() {
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 			
-		new_scene.scene_arena->n_items = 0;
-		draw_triangle(new_scene, new_triangle);
+		//new_scene.scene_arena->n_items = 0;
+		//draw_triangle(new_scene, new_triangle);
 
 		i++;
 		if (i > 1000) {

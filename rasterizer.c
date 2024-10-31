@@ -287,6 +287,9 @@ typedef struct triangle {
 	canvas_point p3;	
 	rgb_color color;
 	rgb_color outline_color;
+	int p1l;
+	int p2l;
+	int p3l;
 } triangle; 
 
 typedef struct coord {
@@ -302,6 +305,17 @@ typedef struct matrix {
 	coord c;
 	coord d;
 } matrix;
+
+int coord_equal(coord a, coord b) {
+	if (a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w) {
+		return 1;
+	}
+	return 0;
+}
+
+void coord_print(coord a) {
+	printf("coord: %f %f %f %f\n", a.x, a.y, a.z, a.w);
+} 
 
 coord coord_create(double x, double y, double z, double w) {
 	coord output = {x,y,z, w};
@@ -481,7 +495,7 @@ void draw_triangle_interior(scene s, triangle t, int h1, int h2, int h3) {
 }
 
 void draw_triangle(scene s, triangle t) {
-	draw_triangle_interior(s, t, 999, 999, 999);
+	draw_triangle_interior(s, t, t.p1l, t.p2l, t.p3l);
 	//draw_triangle_interior(s, t, 10, 500, 990);
 	//draw_triangle_outline(s,t);
 }
@@ -562,44 +576,157 @@ typedef struct raw_triangle {
 } raw_triangle;
 
 raw_triangle raw_triangle_create(coord a, coord b, coord c) {
+	if (!(!coord_equal(a,b) && !coord_equal(b,c) && !coord_equal(a,c))) {
+		printf("Triangle has three equal coordd\n");
+		coord_print(a);
+		coord_print(b);
+		coord_print(c);
+		exit(0);
+	};
 	raw_triangle output = {a,b,c};
+	return output;
+}
+
+coord coord_unit(coord intput_coord) {
+	double len = coord_length(intput_coord);
+	coord output = coord_scale(intput_coord, 1/len);
+	return output;
+}
+
+double coord_project(coord n, coord l) {
+	double dot = n.x*l.x + n.y*l.y + n.z*l.z;
+	double len = (coord_length(n)* coord_length(l));
+	//printf("dot, len: %f %f\n",dot, len);
+	assert(dot * dot < 1.001);
+	double output = dot/len;
+	return output;
+} 
+
+int get_lighting (coord input_coord, coord normal) {
+	int max_intensity = 999;
+
+	//assume a single directional light 
+	coord light_vector = {0.4, 0.4, 1.0, 0.0};
+	light_vector = coord_unit(light_vector);
+
+	double diffuse = coord_project(normal, light_vector);
+	if (diffuse < 0.01) {
+		diffuse = 0;
+	} 
+	//printf("Diffuse: %f\n", diffuse);
+	assert(diffuse < 1.0);
+	
+
+	double intensity = 0.2 + 0.4*diffuse;//specular goes here!
+	//printf("Intensity intesity: %f\n", intensity);
+
+	int return_intensity =	(int)(intensity*((double)max_intensity));
+
+	printf("Return intesity: %d\n", return_intensity);
+	
+	return return_intensity;
+}
+
+coord coord_cross(coord a,coord b) {
+	coord output = {a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x, 0.0};
+	output = coord_unit(output);
+	return output;
+}
+
+coord get_triangle_normal(raw_triangle t) {
+	coord l1 = coord_sub(t.b,t.a);
+	coord l2 = coord_sub(t.c,t.a);
+	coord output = coord_unit(coord_cross(l1,l2));
 	return output;
 }
 
 triangle raw_to_processed_triangle(raw_triangle t, rgb_color red, rgb_color blue) {
 	triangle processed_triangle;
+	coord normal_vec = get_triangle_normal(t);
+
 	processed_triangle.color = red;
 	processed_triangle.outline_color = blue;
+
 	processed_triangle.p1 = coord_to_canvas(coord_to_viewport(t.a));
 	processed_triangle.p2 = coord_to_canvas(coord_to_viewport(t.b));
 	processed_triangle.p3 = coord_to_canvas(coord_to_viewport(t.c));
-	
+
+	//need to calculate lighting for these
+	processed_triangle.p1l = get_lighting(t.a,normal_vec);
+	processed_triangle.p2l = get_lighting(t.b, normal_vec);
+	processed_triangle.p3l = get_lighting(t.c, normal_vec);
+	int temp_light;
+
 	canvas_point temp;
 
 	if (processed_triangle.p1.y > processed_triangle.p2.y) {
 		temp = processed_triangle.p1; 
 		processed_triangle.p1 = processed_triangle.p2;
 		processed_triangle.p2 = temp;
+
+		temp_light = processed_triangle.p1l;
+		processed_triangle.p1l = processed_triangle.p2l;
+		processed_triangle.p2l = temp_light;
 	}
 	
 	if (processed_triangle.p2.y > processed_triangle.p3.y) {
 		temp = processed_triangle.p2; 
 		processed_triangle.p2 = processed_triangle.p3;
 		processed_triangle.p3 = temp;
+		
+		temp_light = processed_triangle.p2l;
+		processed_triangle.p2l = processed_triangle.p3l;
+		processed_triangle.p3l = temp_light;
 	}
 	
 	if (processed_triangle.p1.y > processed_triangle.p2.y) {
 		temp = processed_triangle.p1; 
 		processed_triangle.p1 = processed_triangle.p2;
 		processed_triangle.p2 = temp;
+		
+		temp_light = processed_triangle.p1l;
+		processed_triangle.p1l = processed_triangle.p2l;
+		processed_triangle.p2l = temp_light;
 	}
 	return processed_triangle;	
+}
+
+void pyramid(scene s) {
+	rgb_color red = {244, 23, 43};
+	rgb_color blue = {23, 43, 243};
+
+	double offset = 0.2;
+	coord points [4] = {
+		coord_create(0.0, -0.25, 2.0 , 0.0),
+		coord_create(-0.25, -0.25, 2.3 , 0.0),
+		coord_create(0.25, -0.25, 2.3 , 0.0),
+		coord_create(0.0, 0.25, 2.15 , 0.0),
+	};
+
+	enum {FRONT = 0, LEFT = 1, RIGHT = 2, TOP = 3};
+	raw_triangle triangles [4] = {
+		raw_triangle_create(points[LEFT], points[FRONT], points[RIGHT]),
+		raw_triangle_create(points[RIGHT], points[FRONT], points[TOP]),
+		raw_triangle_create(points[LEFT], points[FRONT], points[TOP]),
+		raw_triangle_create(points[TOP], points[RIGHT], points[LEFT]),
+	}; 
+
+	triangle final_triangles [4];
+	for (int i = 0; i < 4; i++) {
+		final_triangles[i] = raw_to_processed_triangle(triangles[i], red, blue);	
+	}	
+	
+	for (int i = 0; i < 4; i++) {
+		draw_triangle(s, final_triangles[i]);
+	}	
+
 }
 
 void tirangle_cube(scene s) {
 	rgb_color red = {244, 23, 43};
 	rgb_color blue = {23, 43, 243};
 
+	double offset = 0.2;
 	coord points [8] = {
 		coord_create(-0.25, -0.25, 2.0 , 0.0),
 		coord_create(0.25, -0.25, 2.0 , 0.0),
@@ -622,9 +749,9 @@ void tirangle_cube(scene s) {
 		raw_triangle_create(points[TRF], points[TLF], points[TLB]),
 		raw_triangle_create(points[TLB], points[TRB], points[TRF]),
 		raw_triangle_create(points[BRF], points[TRB], points[BRB]),
-		raw_triangle_create(points[TRF], points[TRB], points[TRB]),
+		raw_triangle_create(points[TRF], points[TRB], points[BRF]),
 		raw_triangle_create(points[BLF], points[TLB], points[BLB]),
-		raw_triangle_create(points[TLF], points[TLB], points[TLB]),
+		raw_triangle_create(points[TLF], points[TLB], points[BLF]),
 	}; 
 
 	triangle final_triangles [12];
@@ -662,7 +789,8 @@ int main() {
 	//draw_triangle(new_scene, new_triangle); 
 	//triangle_from_3d(new_scene);
 	//cube_from_3d(new_scene);
-	tirangle_cube(new_scene); 
+	//tirangle_cube(new_scene); 
+	pyramid(new_scene);
 
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1920, 1080, 0, GL_RGB ,GL_UNSIGNED_BYTE, new_scene.screen);

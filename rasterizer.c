@@ -119,6 +119,7 @@ GLFWwindow * opengl_init(unsigned int * VAO, unsigned int * program, unsigned in
 typedef struct canvas_point {
 	int x; 
 	int y;
+	double z;
 } canvas_point;
 
 typedef struct rgb_color {
@@ -135,14 +136,15 @@ typedef struct int_arena {
 
 typedef struct scene {
 	unsigned char * screen; 
+	double *depth_buffer;
 	int screen_width; 
 	int screen_height; 
 	int_arena * scene_arena;
 
 } scene;
 
-canvas_point create_point(int x, int y) {
-	canvas_point new = {x,y};
+canvas_point create_point(int x, int y, double z) {
+	canvas_point new = {x,y, z};
 	return new;
 }
 
@@ -151,18 +153,24 @@ rgb_color create_color(unsigned char r, unsigned char g, unsigned char b) {
 	return new;
 }
 
-void put_pixel_on_screen(scene s, int x, int y, rgb_color color) {
+void put_pixel_on_screen(scene s, int x, int y, rgb_color color, double z) {
 	//printf("Drawing.");
 	assert((x < s.screen_width) && (x >= 0));
 	assert((y < s.screen_height) && (y >= 0));
 
-	s.screen[(x+s.screen_width*y)*3] = color.r;
-	s.screen[(x+s.screen_width*y)*3 + 1] = color.g;
-	s.screen[(x+s.screen_width*y)*3 + 2] = color.b;
+	//lt may be wrong here
+	if (s.depth_buffer[x+s.screen_width*y] < (1/z)) {  
+		s.screen[(x+s.screen_width*y)*3] = color.r;
+		s.screen[(x+s.screen_width*y)*3 + 1] = color.g;
+		s.screen[(x+s.screen_width*y)*3 + 2] = color.b;
+
+		s.depth_buffer[x+s.screen_width*y] = (1/z);  
+	}
+
 }
 
 void put_pixels_on_canvas(scene s, canvas_point point, rgb_color color) {
-	put_pixel_on_screen(s, point.x + (s.screen_width/2), point.y + (s.screen_height/2), color);
+	put_pixel_on_screen(s, point.x + (s.screen_width/2), point.y + (s.screen_height/2), color, point.z);
 }
 
 int_arena * int_arena_create (int size) {
@@ -182,7 +190,7 @@ void int_arena_add(int_arena * arena, int a) {
 	if (arena->n_items >= arena->max_items-1) {
 		arena->max_items *= 2;
 		arena->storage = realloc(arena->storage, arena->max_items*sizeof(int));
-		printf("Realloc occured\n");
+		//printf("Realloc occured\n");
 	}
 	arena->storage[arena->n_items] = a;
 	arena->n_items++;
@@ -257,7 +265,7 @@ void drawline(scene s, canvas_point p0, canvas_point p1, rgb_color color) {
 		}
 		draw_array = interpolate(s, p0.x, p0.y, p1.x, p1.y);
 		for (int x = p0.x; x < p1.x; x++) {
-			put_pixels_on_canvas(s, create_point(x,int_array_get_index(draw_array,x-p0.x)), color);
+			put_pixels_on_canvas(s, create_point(x,int_array_get_index(draw_array,x-p0.x), 0.0), color); //this needs to interpolate z 
 		}
 	} else {
 		if (p0.y > p1.y) {
@@ -267,7 +275,7 @@ void drawline(scene s, canvas_point p0, canvas_point p1, rgb_color color) {
 		}
 		draw_array = interpolate(s,p0.y, p0.x, p1.y, p1.x);
 		for (int y = p0.y; y < p1.y; y++) {
-			put_pixels_on_canvas(s, create_point(int_array_get_index(draw_array, y-p0.y), y), color);
+			put_pixels_on_canvas(s, create_point(int_array_get_index(draw_array, y-p0.y), y, 0.0), color); //this needs to interpolate z
 		}
 	}
 
@@ -336,7 +344,7 @@ double coord_length(coord a) {
 coord coord_to_viewport(coord a) {
 	double x = (a.x*canvas_depth)/a.z;
 	double y = (a.y*canvas_depth)/a.z;
-	coord result = {x, y, canvas_depth, 0.0};
+	coord result = {x, y, a.z, 0.0}; //z used to be canvas_depth
 	return result;
 }
 
@@ -417,6 +425,11 @@ void draw_triangle_interior(scene s, triangle t, int h1, int h2, int h3) {
 	int_array x12 = interpolate(s, t.p2.y, t.p2.x, t.p3.y, t.p3.x);	
 	int_array x012 = int_array_cat(x01, x12);
 	int_array x02 = interpolate(s, t.p1.y, t.p1.x, t.p3.y, t.p3.x);	
+	
+	int_array z01 = interpolate(s, t.p1.y, (int)(t.p1.z*1000), t.p2.y, (int)(t.p2.z*1000));	
+	int_array z12 = interpolate(s, t.p2.y, (int)(t.p2.z*1000), t.p3.y, (int)(t.p3.z*1000));	
+	int_array z012 = int_array_cat(z01, z12);
+	int_array z02 = interpolate(s, t.p1.y, (int)(t.p1.z*1000), t.p3.y, (int)(t.p3.z*1000));	
 
 	//h points note, mixing these in with x point computations will lead to disaster
 	int_array h01	= interpolate(s, t.p1.y, h1, t.p2.y, h2);
@@ -428,6 +441,9 @@ void draw_triangle_interior(scene s, triangle t, int h1, int h2, int h3) {
 	int_array x_left = x012;
 	int_array x_right = x02;
 	
+	int_array z_left = z012;
+	int_array z_right = z02;
+
 	int_array h_left = h012;
 	int_array h_right = h02;
 
@@ -438,6 +454,9 @@ void draw_triangle_interior(scene s, triangle t, int h1, int h2, int h3) {
 
 		h_left = h02;
 		h_right = h012;
+
+		z_left = z02;
+		z_right = z012;
 	}
 
 	for (int y = t.p1.y; y < t.p3.y; y++) {
@@ -446,25 +465,31 @@ void draw_triangle_interior(scene s, triangle t, int h1, int h2, int h3) {
 
 		int hl = int_array_get_index(h_left, y-t.p1.y);
 		int hr = int_array_get_index(h_right, y-t.p1.y);
+		
+		int zl = int_array_get_index(z_left, y-t.p1.y);
+		int zr = int_array_get_index(z_right, y-t.p1.y);
 
 		int_array h_segment = interpolate(s, xl, hl, xr, hr);
+		int_array z_segment = interpolate(s, xl, zl, xr, zr);
 
 		for (int x = xl; x < xr; x++) {
 			rgb_color shaded_color = color_scale(t.color,int_array_get_index(h_segment, x-xl)); 
-			put_pixels_on_canvas(s, create_point(x,y), shaded_color);
+			double z = (double)(int_array_get_index(z_segment, x-xl));
+			put_pixels_on_canvas(s, create_point(x,y,z), shaded_color);
 		}
 	}	
 }
 
 void draw_triangle(scene s, triangle t) {
-	draw_triangle_interior(s, t, 10, 500, 990);
-	draw_triangle_outline(s,t);
+	draw_triangle_interior(s, t, 999, 999, 999);
+	//draw_triangle_interior(s, t, 10, 500, 990);
+	//draw_triangle_outline(s,t);
 }
 
-triangle triangle_create (int x1, int y1, int x2, int y2, int x3, int y3, unsigned char r, unsigned char g, unsigned char b, unsigned char r2, unsigned char g2, unsigned char b2) {
-	canvas_point p1 = create_point(x1,y1);
-	canvas_point p2 = create_point(x2,y2);
-	canvas_point p3 = create_point(x3,y3);
+triangle triangle_create (int x1, int y1, double z1,int x2, int y2, double z2, int x3, int y3, double z3, unsigned char r, unsigned char g, unsigned char b, unsigned char r2, unsigned char g2, unsigned char b2) {
+	canvas_point p1 = create_point(x1,y1, z1);
+	canvas_point p2 = create_point(x2,y2, z2);
+	canvas_point p3 = create_point(x3,y3, z3);
 	canvas_point temp;
 
 	if (p1.y > p2.y) {
@@ -574,16 +599,16 @@ triangle raw_to_processed_triangle(raw_triangle t, rgb_color red, rgb_color blue
 void tirangle_cube(scene s) {
 	rgb_color red = {244, 23, 43};
 	rgb_color blue = {23, 43, 243};
-	
+
 	coord points [8] = {
-		coord_create(-0.25, -0.25, 2.0, 0.0),
-		coord_create(0.25, -0.25, 2.0, 0.0),
-		coord_create(-0.25, 0.25, 2.0, 0.0),
-		coord_create(0.25, 0.25, 2.0, 0.0),
-		coord_create(-0.25, -0.25, 2.5, 0.0),
-		coord_create(0.25, -0.25, 2.5, 0.0),
-		coord_create(-0.25, 0.25, 2.5, 0.0),
-		coord_create(0.25, 0.25, 2.5, 0.0),
+		coord_create(-0.25, -0.25, 2.0 , 0.0),
+		coord_create(0.25, -0.25, 2.0 , 0.0),
+		coord_create(-0.25, 0.25, 2.0 , 0.0),
+		coord_create(0.25, 0.25, 2.0 , 0.0),
+		coord_create(-0.25, -0.25, 2.5 , 0.0),
+		coord_create(0.25, -0.25, 2.5 , 0.0),
+		coord_create(-0.25, 0.25, 2.5 , 0.0),
+		coord_create(0.25, 0.25, 2.5 , 0.0),
 	};
 
 	enum {BLF = 0, BRF = 1, TLF = 2, TRF = 3, BLB = 4, BRB = 5, TLB = 6, TRB = 7};
@@ -613,6 +638,12 @@ void tirangle_cube(scene s) {
 
 }
 
+void clear_scene(scene * s, rgb_color background_color) {
+	for (int i = 0; i < 1920*1080; i++) {
+		s->screen[i] = 0;
+	}
+}
+
 int main() {	
 	unsigned char * screen = calloc(3*1920*1080,sizeof(unsigned char));
 
@@ -623,6 +654,7 @@ int main() {
 	scene new_scene;
 	new_scene.screen_width = 1920;
 	new_scene.screen_height = 1080;
+	new_scene.depth_buffer = calloc(new_scene.screen_width * new_scene.screen_height, sizeof(double));
 	new_scene.screen = calloc(3*new_scene.screen_height*new_scene.screen_width, sizeof(unsigned char));
 	new_scene.scene_arena = int_arena_create(10000);
 
@@ -635,6 +667,7 @@ int main() {
 	GLFWwindow  * window = opengl_init(&VAO, &program, &texture);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1920, 1080, 0, GL_RGB ,GL_UNSIGNED_BYTE, new_scene.screen);
 	glGenerateMipmap(GL_TEXTURE_2D);
+	rgb_color background = {0,0,0};
 
 	int i = 0;
 
@@ -653,9 +686,6 @@ int main() {
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 			
-		//new_scene.scene_arena->n_items = 0;
-		//draw_triangle(new_scene, new_triangle);
-
 		i++;
 		if (i > 1000) {
 			exit(0);
@@ -666,4 +696,5 @@ int main() {
 	glfwTerminate();
 	int_arena_free(new_scene.scene_arena);
 	free(new_scene.screen);
+	free(new_scene.depth_buffer);
 }
